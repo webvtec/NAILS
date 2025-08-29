@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;700&amp;display=swap" rel="stylesheet"/>
 <style>
     body {
@@ -984,7 +985,48 @@ function generateBookingNumber(name) {
 }
 
 
-  
+
+function sendBookingEmails(bookingNumber, name, date, time, service) {
+  const user = firebase.auth().currentUser;
+  if (!user || !user.email) {
+    console.error("No user email found for reminders.");
+    return;
+  }
+
+  const email = user.email;
+
+  // Confirmation email (instant)
+  emailjs.send("YOUR_SERVICE_ID", "BOOKING_CONFIRMATION_TEMPLATE_ID", {
+    bookingNumber,
+    name,
+    to_email: email,
+    date,
+    time,
+    service
+  }).then(() => console.log("✅ Confirmation email sent"))
+    .catch((err) => console.error("❌ Confirmation email failed:", err));
+
+  // Reminder 1 (EmailJS handles 24h delay)
+  emailjs.send("YOUR_SERVICE_ID", "REMINDER1_TEMPLATE_ID", {
+    name,
+    to_email: email,
+    date,
+    time,
+    service
+  }).then(() => console.log("✅ Reminder 1 queued"))
+    .catch((err) => console.error("❌ Reminder 1 failed:", err));
+
+  // Reminder 2 (EmailJS handles 90 min delay)
+  emailjs.send("YOUR_SERVICE_ID", "REMINDER2_TEMPLATE_ID", {
+    name,
+    to_email: email,
+    date,
+    time,
+    service
+  }).then(() => console.log("✅ Reminder 2 queued"))
+    .catch((err) => console.error("❌ Reminder 2 failed:", err));
+}
+
 function submitBooking(event) {
   event.preventDefault();
 
@@ -1027,7 +1069,7 @@ function submitBooking(event) {
       
       if (!isAvailable) {
         alert('This time is not available. Please choose another time.');
-        return Promise.reject('Time slot not available'); // This will skip the rest
+        return Promise.reject('Time slot not available');
       }
 
       console.log('Adding booking to database...');
@@ -1043,16 +1085,18 @@ function submitBooking(event) {
         service: services,
         duration,
         deposit: "No",
-        timestamp: firebase.firestore.FieldValue.serverTimestamp() // Add timestamp for debugging
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
     })
     .then((docRef) => {
       if (!docRef) {
-        // This means validateTimeSlot returned false and we rejected
         return;
       }
       
-      console.log('Booking saved successfully, sending Telegram notification...');
+      console.log('Booking saved successfully, sending notifications...');
+      
+      // Send booking confirmation emails
+      sendBookingEmails(bookingNumber, name, date, time, services);
       
       const [year, month, day] = date.split("-");
       const formattedDate = new Date(year, month - 1, day).toLocaleDateString("en-US", {
@@ -1085,20 +1129,18 @@ function submitBooking(event) {
     })
     .then((response) => {
       if (!response) {
-        // This means we skipped due to unavailable time slot
         return;
       }
       
       console.log('Telegram API response status:', response.status);
       
-      // Note: Telegram API might fail but booking should still be considered successful
       if (response.status >= 200 && response.status < 300) {
         console.log('Telegram notification sent successfully');
       } else {
         console.warn('Telegram notification failed, but booking was saved');
       }
       
-      // Always show success if we got this far (booking was saved)
+      // Reset form and show success message
       document.querySelector("#bookingSection form").reset();
       document.getElementById("estimateTimeMessage").innerHTML = "";
       document.getElementById("selectedTime").innerHTML = "<option value=''>Pick date & service first</option>";
@@ -1145,6 +1187,11 @@ function submitBooking(event) {
   <p style="font-size:15px; margin:10px 0;">
     Thank you for booking with us! We are looking forward to see you soon. 🎉
   </p>
+  
+  <!-- Email confirmation note -->
+  <p style="font-size:13px; color:#007bff; margin:10px 0;">
+    📧 A confirmation email has been sent to your email address.
+  </p>
 
   <hr style="margin:15px 0; border:0; height:1px; background:#ddd;">
 
@@ -1169,19 +1216,15 @@ function submitBooking(event) {
     OK
   </button>
 </div>
-
       `;
       document.getElementById('bookingModal').style.display = 'flex';
     })
     .catch((err) => {
       console.error("Detailed booking error:", err);
       
-      // More specific error messages
       if (err === 'Time slot not available') {
-        // This error was already handled above
         return;
       } else if (err.code) {
-        // Firebase-specific errors
         switch (err.code) {
           case 'permission-denied':
             alert("You don't have permission to make bookings. Please contact support.");
@@ -1196,28 +1239,19 @@ function submitBooking(event) {
             alert(`Database error: ${err.message}`);
         }
       } else if (err.message && err.message.includes('fetch')) {
-        // Network/Telegram API errors - but booking might have been saved
         console.warn("Telegram notification failed, but booking may have been saved");
         alert("Booking may have been saved, but notification failed. Please check 'My Bookings' to confirm.");
       } else {
-        // Generic error
         alert("Failed to save booking. Please try again. Error: " + (err.message || err));
       }
     });
 }
 
-
-// The closeBookingModal() function should already exist in your HTML/existing JavaScript
-// Add this function to close the modal
 function closeBookingModal() {
   document.getElementById('bookingModal').style.display = 'none';
-            }
-
-// Add this function to close the modal
-function closeBookingModal() {
-  document.getElementById('bookingModal').style.display = 'none';
-}
-
+          }
+  
+  
 
     function showSection(sectionId) {
   document.querySelectorAll('.content-section').forEach(section =>
