@@ -331,12 +331,12 @@ box-sizing: border-box;
 
   <label for="photoCategorySelect">SELECT CATEGORY</label>
   <select id="photoCategorySelect">
-    <option value="Nails">NAILS</option>
-    <option value="Manicure">MANICURE</option>
-    <option value="Pedicure">PEDICURE</option>
-    <option value="Gel Polish">GEL POLISH</option>
+    <option value="GEL X NAILS">GEL X NAILS</option>
+    <option value="ACRYLIC NAILS">ACRYLIC NAILS</option>
+    <option value="GEL POLISH">GEL POLISH</option>
+    <option value="MANICURE">MANICURE</option>
+    <option value="PEDICURE">PEDICURE</option>
     <option value="EXTENSIONS">EXTENSIONS</option>
-    <option value="Paraffin Wax">PARAFFIN WAX</option>
   </select>
 
   <button onclick="addPhotoUrl()">Add Photo</button>
@@ -432,13 +432,13 @@ box-sizing: border-box;
     text-align:center;
     box-shadow:0 4px 10px rgba(0,0,0,0.2);
   ">
-    <h3 style="margin-bottom:15px;">UPDATE DEPOSIT STATUS</h3>
+    <h3 style="margin-bottom:15px;">UPDATE PAYMENT STATUS</h3>
     
     <label style="display:block; text-align:left; margin:10px 0;">
-      <input type="radio" name="depositChoice" value="Made"> 💵 $4,000 DEPOSIT MADE
+      <input type="radio" name="depositChoice" value="Made"> 💵 PAYMENT MADE
     </label>
     <label style="display:block; text-align:left; margin:10px 0;">
-      <input type="radio" name="depositChoice" value="No"> NO DEPOSIT MADE
+      <input type="radio" name="depositChoice" value="No"> NO PAYMENT MADE
     </label>
 
     <div style="margin-top:20px;">
@@ -493,17 +493,36 @@ box-sizing: border-box;
   </div>
 </div>
 
+<div id="toast" style="
+  visibility: hidden;
+  min-width: 250px;
+  margin-left: -125px;
+  background-color: #4CAF50;
+  color: #fff;
+  text-align: center;
+  border-radius: 8px;
+  padding: 14px;
+  position: fixed;
+  z-index: 3000;
+  left: 50%;
+  bottom: 30px;
+  font-size: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  opacity: 0;
+  transition: opacity 0.5s, bottom 0.5s;
+"></div>
 
   
   <script>
     const firebaseConfig = {
-  apiKey: "AIzaSyBx9_GrR4_ruM8v-GDOj4De1erg7nWsH08",
-  authDomain: "arcturus-nail-care.firebaseapp.com",
-  projectId: "arcturus-nail-care",
-  storageBucket: "arcturus-nail-care.firebasestorage.app",
-  messagingSenderId: "604991163098",
-  appId: "1:604991163098:web:47730d7480c66d813633e3"
+  apiKey: "AIzaSyCI24steVBjoIgV68Wkr_OzddXzwHZjnMs",
+  authDomain: "nailuxe-nailz-by-navia.firebaseapp.com",
+  projectId: "nailuxe-nailz-by-navia",
+  storageBucket: "nailuxe-nailz-by-navia.firebasestorage.app",
+  messagingSenderId: "937826104665",
+  appId: "1:937826104665:web:9eea9808ccce54c1cd8848"
 };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
@@ -683,13 +702,13 @@ box-sizing: border-box;
             <p><strong>Date:</strong> ${booking.date}</p>
             <p><strong>Time:</strong> ${booking.time}</p>
             <p><strong>Service:</strong> ${booking.service}</p>
-            <p><strong>💵 Deposit:</strong> ${booking.deposit || "No"}</p>
+            <p><strong>💵 Payment:</strong> ${booking.deposit || "No"}</p>
             <p><strong>Status:</strong> <span class="status-label ${booking.status === 'Completed' ? 'status-completed' : booking.status === 'Not Completed' ? 'status-not' : 'status-none'}">
             ${booking.status || "Not Set"}
             </span></p>
             <div class="action-buttons">
             <button class="cancel-btn" onclick="cancelReservation('${booking.id}')">Cancel</button>
-            <button class="deposit-btn" onclick="updateDeposit('${booking.id}')">Deposit</button>
+            <button class="deposit-btn" onclick="updateDeposit('${booking.id}')">Payment</button>
             ${title === "Today" ? `<button class="status-btn" onclick="updateStatus('${booking.id}')">Status</button>` : ""}
             </div>
           </div>
@@ -1045,7 +1064,7 @@ firebase.auth().onAuthStateChanged(user => {
 });
 
     function cancelReservation(orderId) {
-  if (!confirm("Are you sure you want to cancel this order?")) return;
+  if (!confirm("Are you sure you want to cancel this booking?")) return;
 
   db.collection("bookings").doc(orderId).delete()
     .then(() => {
@@ -1092,7 +1111,7 @@ function updateDeposit(bookingId) {
 function confirmDeposit() {
   const choice = document.querySelector('input[name="depositChoice"]:checked');
   if (!choice) {
-    alert("Please select an option.");
+    showToast("⚠️ Please select an option.", false);
     return;
   }
 
@@ -1103,13 +1122,14 @@ function confirmDeposit() {
   })
   .then(() => {
     closeDepositModal();
-    alert("Deposit status updated to: " + depositValue);
+    showToast(`✅ Payment status set to: ${depositValue}`);
   })
   .catch(error => {
     console.error("Error updating deposit:", error);
-    alert("Failed to update deposit. Please try again.");
+    showToast("❌ Failed to update payment. Please try again.", false);
   });
 }
+
 
 function closeDepositModal() {
   document.getElementById('depositModal').style.display = 'none';
@@ -1151,6 +1171,22 @@ function confirmStatus() {
 function closeStatusModal() {
   document.getElementById('statusModal').style.display = 'none';
   currentStatusBookingId = null;
+}
+
+
+    function showToast(message, success = true) {
+  const toast = document.getElementById("toast");
+  toast.innerText = message;
+  toast.style.backgroundColor = success ? "#4CAF50" : "#e53935"; // green or red
+  toast.style.visibility = "visible";
+  toast.style.opacity = "1";
+  toast.style.bottom = "50px";
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.bottom = "30px";
+    setTimeout(() => { toast.style.visibility = "hidden"; }, 500);
+  }, 3000);
 }
 
 
