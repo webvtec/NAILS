@@ -8,8 +8,8 @@ admin.initializeApp();
 const transporter = nodemailer.createTransporter({
   service: 'gmail',
   auth: {
-    user: 'your-business-email@gmail.com', // Replace with your business email
-    pass: 'your-app-password'              // Replace with Gmail App Password
+    user: 'carlanviroberts@gmail.com', // Replace with your business email
+    pass: 'lgte nllr qjlw nosc'              // Replace with Gmail App Password
   }
 });
 
