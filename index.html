@@ -996,7 +996,7 @@ function sendBookingEmails(bookingNumber, name, date, time, service) {
   const email = user.email;
 
   // Confirmation email (instant)
-  emailjs.send("YOUR_SERVICE_ID", "BOOKING_CONFIRMATION_TEMPLATE_ID", {
+  emailjs.send("service_n5j78b8", "template_r5qge2h", {
     bookingNumber,
     name,
     to_email: email,
