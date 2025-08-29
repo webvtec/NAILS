@@ -1032,18 +1032,18 @@ function sendConfirmationEmail(bookingNumber, name, date, time, service) {
   
   if (!user?.email) {
     console.warn("No authenticated user or email found");
-    return Promise.resolve(); // Don't fail the booking process
+    return Promise.resolve(); // Don’t fail booking if no email
   }
 
-  console.log("Sending confirmation email...");
+  const email = user.email; // ✅ FIX
 
   return emailjs.send("service_n5j78b8", "template_r5qge2h", {
-    bookingNumber: bookingNumber,
-    name: name,
-    email: email,
-    date: date,
-    time: time,
-    service: service
+    bookingNumber,
+    name,
+    email,   // ✅ Now defined
+    date,
+    time,
+    service
   })
   .then((response) => {
     console.log("✅ Email sent successfully:", response.status, response.text);
@@ -1051,10 +1051,10 @@ function sendConfirmationEmail(bookingNumber, name, date, time, service) {
   })
   .catch((error) => {
     console.error("❌ Email sending failed:", error);
-    // Don't throw error - let booking succeed even if email fails
-    return null;
+    return null; // Let booking succeed anyway
   });
 }
+
 
 // Updated booking submission function
 function submitBooking(event) {
