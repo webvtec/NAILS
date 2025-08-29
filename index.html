@@ -984,7 +984,10 @@ function generateBookingNumber(name) {
   return initials + digits;
 }
 
-
+  (function() {
+    // 🔑 Your EmailJS Public Key
+    emailjs.init("L9_mhDlQunk76nnJA");  
+  })();
 
 function sendBookingEmails(bookingNumber, name, date, time, service) {
   const user = firebase.auth().currentUser;
