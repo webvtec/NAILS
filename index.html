@@ -1005,7 +1005,7 @@ function sendBookingEmails(bookingNumber, name, date, time, service) {
   emailjs.send("service_n5j78b8", "template_r5qge2h", {
     bookingNumber: bookingNumber,
     name: name,
-    to_email: email,
+    email: email,
     date: date,
     time: time,
     service: service
@@ -1040,7 +1040,7 @@ function sendConfirmationEmail(bookingNumber, name, date, time, service) {
   return emailjs.send("service_n5j78b8", "template_r5qge2h", {
     bookingNumber: bookingNumber,
     name: name,
-    to_email: user.email,
+    email: email,
     date: date,
     time: time,
     service: service
