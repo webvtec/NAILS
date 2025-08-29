@@ -989,6 +989,8 @@ function generateBookingNumber(name) {
     emailjs.init("L9_mhDlQunk76nnJA");  
   })();
 
+
+// Fixed email sending function
 function sendBookingEmails(bookingNumber, name, date, time, service) {
   const user = firebase.auth().currentUser;
   if (!user || !user.email) {
@@ -997,39 +999,64 @@ function sendBookingEmails(bookingNumber, name, date, time, service) {
   }
 
   const email = user.email;
+  console.log("Attempting to send email to:", email); // Debug log
 
-  // Confirmation email (instant)
+  // Only send confirmation email (the working one)
   emailjs.send("service_n5j78b8", "template_r5qge2h", {
-    bookingNumber,
-    name,
+    bookingNumber: bookingNumber,
+    name: name,
     to_email: email,
-    date,
-    time,
-    service
-  }).then(() => console.log("✅ Confirmation email sent"))
-    .catch((err) => console.error("❌ Confirmation email failed:", err));
+    date: date,
+    time: time,
+    service: service
+  })
+  .then((response) => {
+    console.log("✅ Confirmation email sent successfully", response);
+  })
+  .catch((error) => {
+    console.error("❌ Confirmation email failed:", error);
+    console.error("Error details:", {
+      status: error.status,
+      text: error.text,
+      message: error.message
+    });
+  });
 
-  // Reminder 1 (EmailJS handles 24h delay)
-  emailjs.send("YOUR_SERVICE_ID", "REMINDER1_TEMPLATE_ID", {
-    name,
-    to_email: email,
-    date,
-    time,
-    service
-  }).then(() => console.log("✅ Reminder 1 queued"))
-    .catch((err) => console.error("❌ Reminder 1 failed:", err));
-
-  // Reminder 2 (EmailJS handles 90 min delay)
-  emailjs.send("YOUR_SERVICE_ID", "REMINDER2_TEMPLATE_ID", {
-    name,
-    to_email: email,
-    date,
-    time,
-    service
-  }).then(() => console.log("✅ Reminder 2 queued"))
-    .catch((err) => console.error("❌ Reminder 2 failed:", err));
+  // TODO: Set up reminder emails later with proper service/template IDs
+  console.log("📧 Reminder emails need to be configured with proper EmailJS templates");
 }
 
+// Alternative: Simple confirmation-only version
+function sendConfirmationEmail(bookingNumber, name, date, time, service) {
+  const user = firebase.auth().currentUser;
+  
+  if (!user?.email) {
+    console.warn("No authenticated user or email found");
+    return Promise.resolve(); // Don't fail the booking process
+  }
+
+  console.log("Sending confirmation email...");
+
+  return emailjs.send("service_n5j78b8", "template_r5qge2h", {
+    bookingNumber: bookingNumber,
+    name: name,
+    to_email: user.email,
+    date: date,
+    time: time,
+    service: service
+  })
+  .then((response) => {
+    console.log("✅ Email sent successfully:", response.status, response.text);
+    return response;
+  })
+  .catch((error) => {
+    console.error("❌ Email sending failed:", error);
+    // Don't throw error - let booking succeed even if email fails
+    return null;
+  });
+}
+
+// Updated booking submission function
 function submitBooking(event) {
   event.preventDefault();
 
@@ -1048,9 +1075,7 @@ function submitBooking(event) {
   const time = document.getElementById('selectedTime').value;
   const services = getSelectedServices();
 
-  // Enhanced validation with detailed logging
-  console.log('Form values:', { name, phone, date, time, services });
-
+  // Validation
   if (!name || !phone || !date || !time) {
     alert('Please fill in all required fields.');
     return;
@@ -1068,15 +1093,11 @@ function submitBooking(event) {
 
   validateTimeSlot(date, time)
     .then((isAvailable) => {
-      console.log('Time slot validation result:', isAvailable);
-      
       if (!isAvailable) {
         alert('This time is not available. Please choose another time.');
         return Promise.reject('Time slot not available');
       }
 
-      console.log('Adding booking to database...');
-      
       // Add booking to database
       return db.collection('bookings').add({
         uid: user.uid,
@@ -1092,16 +1113,22 @@ function submitBooking(event) {
       });
     })
     .then((docRef) => {
-      if (!docRef) {
-        return;
-      }
+      if (!docRef) return;
       
-      console.log('Booking saved successfully, sending notifications...');
+      console.log('Booking saved, sending email...');
       
-      // Send booking confirmation emails
-      sendBookingEmails(bookingNumber, name, date, time, services);
-      
-      const [year, month, day] = date.split("-");
+      // Send email (non-blocking)
+      return sendConfirmationEmail(bookingNumber, name, date, time, services)
+        .then(() => {
+          // Continue with Telegram notification regardless of email result
+          return { bookingNumber, name, phone, date, time, services };
+        });
+    })
+    .then((bookingData) => {
+      if (!bookingData) return;
+
+      // Send Telegram notification
+      const [year, month, day] = bookingData.date.split("-");
       const formattedDate = new Date(year, month - 1, day).toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
@@ -1110,12 +1137,12 @@ function submitBooking(event) {
 
       const message = `📅 NEW BOOKING
 
-🔢 Booking #: ${bookingNumber}
-👤 Name: ${name}
-📞 Phone: ${phone}
+📢 Booking #: ${bookingData.bookingNumber}
+👤 Name: ${bookingData.name}
+📞 Phone: ${bookingData.phone}
 📍 Date: ${formattedDate}
-⏰ Time: ${time}
-💅 Service: ${services}`;
+⏰ Time: ${bookingData.time}
+💅 Service: ${bookingData.services}`;
 
       const telegramBotToken = "7638261664:AAGm0MNVQxN0hlW1bhXBRf-kSRuMgRkCLC8";
       const telegramChatId = "-1002734216867";
@@ -1128,125 +1155,42 @@ function submitBooking(event) {
           text: message,
           parse_mode: "HTML"
         })
-      });
+      }).then(() => bookingData);
     })
-    .then((response) => {
-      if (!response) {
-        return;
-      }
-      
-      console.log('Telegram API response status:', response.status);
-      
-      if (response.status >= 200 && response.status < 300) {
-        console.log('Telegram notification sent successfully');
-      } else {
-        console.warn('Telegram notification failed, but booking was saved');
-      }
-      
-      // Reset form and show success message
+    .then((bookingData) => {
+      if (!bookingData) return;
+
+      // Show success message
       document.querySelector("#bookingSection form").reset();
       document.getElementById("estimateTimeMessage").innerHTML = "";
       document.getElementById("selectedTime").innerHTML = "<option value=''>Pick date & service first</option>";
 
+      // Show success modal
       document.querySelector("#bookingModal h3").style.display = "none";
       document.querySelector("#bookingModal p").innerHTML = `
-        <div style="
-  text-align:center; 
-  padding:20px; 
-  font-family:Arial,sans-serif; 
-  color:#333;
-  max-width:420px;
-  margin:0 auto;
-  background:white;
-  border-radius:12px;
-  box-shadow:0 6px 20px rgba(0,0,0,0.2);">
-  
-  <!-- Success Icon -->
-  <div style="
-    width:70px; 
-    height:70px; 
-    border-radius:50%; 
-    background:#28a745; 
-    display:flex; 
-    align-items:center; 
-    justify-content:center; 
-    margin:0 auto 15px;">
-    <span style="font-size:38px; color:white;">✔</span>
-  </div>
-
-  <!-- Title -->
-  <h2 style="margin:0 0 12px 0; font-size:22px; font-weight:bold;">
-    BOOKING CONFIRMED
-  </h2>
-
-  <!-- Booking number -->
-  <p style="font-size:16px; margin:0 0 12px 0;">
-    Your Booking #: <strong>${bookingNumber}</strong>
-  </p>
-
-  <hr style="margin:15px 0; border:0; height:1px; background:#ddd;">
-
-  <!-- Message -->
-  <p style="font-size:15px; margin:10px 0;">
-    Thank you for booking with us! We are looking forward to see you soon. 🎉
-  </p>
-  
-  <!-- Email confirmation note -->
-  <p style="font-size:13px; color:#007bff; margin:10px 0;">
-    📧 A confirmation email has been sent to your email address.
-  </p>
-
-  <hr style="margin:15px 0; border:0; height:1px; background:#ddd;">
-
-  <!-- Info text -->
-  <p style="font-size:13px; color:#555; margin:15px 0; text-align:left; line-height:1.5;">
-    ℹ️ If you wish to make your payment via online banking, please click the 
-    <b>menu bar</b> icon at the top left of your screen and view the 
-    <b>PAYMENT INFO</b> section. Use your booking number as the payment reference.
-  </p>
-
-  <!-- OK Button -->
-  <button onclick="closeBookingModal()" style="
-    margin-top:15px; 
-    padding:10px 25px; 
-    background:#28a745; 
-    color:white; 
-    border:none; 
-    border-radius:6px; 
-    font-size:15px; 
-    cursor:pointer;
-    font-weight:bold;">
-    OK
-  </button>
-</div>
+        <div style="text-align:center; padding:20px; font-family:Arial,sans-serif; color:#333; max-width:420px; margin:0 auto; background:white; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.2);">
+          <div style="width:70px; height:70px; border-radius:50%; background:#28a745; display:flex; align-items:center; justify-content:center; margin:0 auto 15px;">
+            <span style="font-size:38px; color:white;">✓</span>
+          </div>
+          <h2 style="margin:0 0 12px 0; font-size:22px; font-weight:bold;">BOOKING CONFIRMED</h2>
+          <p style="font-size:16px; margin:0 0 12px 0;">Your Booking #: <strong>${bookingData.bookingNumber}</strong></p>
+          <hr style="margin:15px 0; border:0; height:1px; background:#ddd;">
+          <p style="font-size:15px; margin:10px 0;">Thank you for booking with us! We are looking forward to see you soon. 🎉</p>
+          <p style="font-size:13px; color:#007bff; margin:10px 0;">📧 A confirmation email has been sent to your email address.</p>
+          <button onclick="closeBookingModal()" style="margin-top:15px; padding:10px 25px; background:#28a745; color:white; border:none; border-radius:6px; font-size:15px; cursor:pointer; font-weight:bold;">OK</button>
+        </div>
       `;
       document.getElementById('bookingModal').style.display = 'flex';
     })
     .catch((err) => {
-      console.error("Detailed booking error:", err);
+      console.error("Booking error:", err);
       
       if (err === 'Time slot not available') {
-        return;
-      } else if (err.code) {
-        switch (err.code) {
-          case 'permission-denied':
-            alert("You don't have permission to make bookings. Please contact support.");
-            break;
-          case 'unavailable':
-            alert("Database is temporarily unavailable. Please try again in a moment.");
-            break;
-          case 'network-request-failed':
-            alert("Network error. Please check your internet connection and try again.");
-            break;
-          default:
-            alert(`Database error: ${err.message}`);
-        }
-      } else if (err.message && err.message.includes('fetch')) {
-        console.warn("Telegram notification failed, but booking may have been saved");
-        alert("Booking may have been saved, but notification failed. Please check 'My Bookings' to confirm.");
-      } else {
-        alert("Failed to save booking. Please try again. Error: " + (err.message || err));
+        return; // Already showed alert
       }
+      
+      // Handle other errors
+      alert("Failed to complete booking. Please try again.");
     });
 }
 
