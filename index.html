@@ -984,16 +984,34 @@ function generateBookingNumber(name) {
   return initials + digits;
 }
 
-  (function() {
-  // Initialize EmailJS with better error handling
-  try {
-    emailjs.init("L9_mhDlQunk76nnJA");
-    console.log("✅ EmailJS initialized successfully");
-  } catch (error) {
-    console.error("❌ EmailJS initialization failed:", error);
+  // Enhanced EmailJS initialization with loading check
+(function() {
+  function initEmailJS() {
+    if (typeof emailjs === 'undefined') {
+      console.error('EmailJS library not loaded');
+      setTimeout(initEmailJS, 1000); // Retry after 1 second
+      return;
+    }
+    
+    try {
+      emailjs.init("L9_mhDlQunk76nnJA");
+      console.log("✅ EmailJS initialized successfully");
+      window.emailJSReady = true; // Flag to check if ready
+    } catch (error) {
+      console.error("❌ EmailJS initialization failed:", error);
+      window.emailJSReady = false;
+    }
+  }
+  
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEmailJS);
+  } else {
+    initEmailJS();
   }
 })();
 
+    
 // Fixed email sending function
 function sendBookingEmails(bookingNumber, name, date, time, service) {
   const user = firebase.auth().currentUser;
@@ -1030,44 +1048,94 @@ function sendBookingEmails(bookingNumber, name, date, time, service) {
   console.log("📧 Reminder emails need to be configured with proper EmailJS templates");
 }
 
+
+// Add this function for immediate email testing
+function testEmailNow() {
+  console.log("🔵 Testing email immediately...");
+  
+  if (typeof emailjs === 'undefined') {
+    console.error("❌ EmailJS not loaded");
+    return;
+  }
+  
+  if (!window.emailJSReady) {
+    console.error("❌ EmailJS not initialized");
+    return;
+  }
+  
+  const user = firebase.auth().currentUser;
+  if (!user) {
+    console.error("❌ No user logged in");
+    return;
+  }
+  
+  console.log("📧 Sending test email to:", user.email);
+  
+  emailjs.send("service_n5j78b8", "template_r5qge2h", {
+    to_email: user.email,
+    name: "Test User",
+    bookingNumber: "TEST123",
+    date: "2025-01-01",
+    time: "2:00 PM",
+    service: "Test Service"
+  })
+  .then((response) => {
+    console.log("✅ Test email sent!", response);
+    alert("Test email sent successfully!");
+  })
+  .catch((error) => {
+    console.error("❌ Test email failed:", error);
+    alert("Test email failed - check console");
+  });
+}
+
+    
 // Alternative: Simple confirmation-only version
 function sendConfirmationEmail(bookingNumber, name, date, time, service) {
+  console.log("🔵 sendConfirmationEmail called with:", { bookingNumber, name, date, time, service });
+  
   const user = firebase.auth().currentUser;
   
   if (!user?.email) {
-    console.warn("No authenticated user or email found");
-    return Promise.resolve(); // Don't fail booking if no email
+    console.warn("❌ No authenticated user or email found");
+    return Promise.resolve(null);
   }
 
-  console.log("Sending email with data:", {
-    bookingNumber,
-    name,
-    email: user.email,
-    date,
-    time,
-    service
-  });
+  // Check if EmailJS is ready
+  if (!window.emailJSReady || typeof emailjs === 'undefined') {
+    console.error("❌ EmailJS not ready");
+    return Promise.resolve(null);
+  }
 
-  return emailjs.send("service_n5j78b8", "template_r5qge2h", {
-    to_email: user.email,  // Add this for the recipient
-    name: name,            // Template expects {{name}}
+  const emailData = {
+    to_email: user.email,
+    name: name,
     bookingNumber: bookingNumber,
     date: date,
     time: time,
     service: service
-  })
-  .then((response) => {
-    console.log("✅ Email sent successfully:", response.status, response.text);
-    return response;
-  })
-  .catch((error) => {
-    console.error("❌ Email sending failed:", error);
-    console.error("Error details:", {
-      status: error.status,
-      text: error.text,
-      message: error.message
-    });
-    return null;
+  };
+
+  console.log("📧 Attempting to send email to:", user.email);
+  console.log("📧 Email data:", emailData);
+  
+  // Force the email send with explicit promise handling
+  return new Promise((resolve, reject) => {
+    emailjs.send("service_n5j78b8", "template_r5qge2h", emailData)
+      .then((response) => {
+        console.log("✅ Email sent successfully:", response);
+        console.log("Response status:", response.status);
+        console.log("Response text:", response.text);
+        resolve(response);
+      })
+      .catch((error) => {
+        console.error("❌ Email sending failed:", error);
+        console.error("Error status:", error?.status);
+        console.error("Error text:", error?.text);
+        console.error("Error message:", error?.message);
+        // Don't reject - let booking continue
+        resolve(null);
+      });
   });
 }
 
@@ -1154,17 +1222,28 @@ function submitBooking(event) {
     .then((docRef) => {
       if (!docRef) return;
       
-      console.log('Booking saved, sending email...');
+      console.log('🔵 Booking saved with ID:', docRef.id);
+      console.log('🔵 Now attempting to send email...');
+      console.log('🔵 User email:', user.email);
+      console.log('🔵 EmailJS ready?', window.emailJSReady);
+      console.log('🔵 EmailJS available?', typeof emailjs !== 'undefined');
       
-      // Send email (non-blocking)
-      return sendConfirmationEmail(bookingNumber, name, date, time, services)
-        .then(() => {
-          // Continue with Telegram notification regardless of email result
-          return { bookingNumber, name, phone, date, time, services };
-        });
+      // Force email sending with explicit promise handling
+      const emailPromise = sendConfirmationEmail(bookingNumber, name, date, time, services);
+      console.log('🔵 Email promise created:', emailPromise);
+      
+      return emailPromise.then((emailResult) => {
+        console.log('🔵 Email promise resolved with:', emailResult);
+        return { bookingNumber, name, phone, date, time, services };
+      }).catch((emailError) => {
+        console.error('🔵 Email promise rejected:', emailError);
+        return { bookingNumber, name, phone, date, time, services };
+      });
     })
     .then((bookingData) => {
       if (!bookingData) return;
+
+      console.log('🔵 Proceeding to Telegram with booking data:', bookingData);
 
       // Send Telegram notification
       const [year, month, day] = bookingData.date.split("-");
@@ -1199,6 +1278,8 @@ function submitBooking(event) {
     .then((bookingData) => {
       if (!bookingData) return;
 
+      console.log('🔵 All notifications sent, showing success modal');
+
       // Show success message
       document.querySelector("#bookingSection form").reset();
       document.getElementById("estimateTimeMessage").innerHTML = "";
@@ -1222,7 +1303,7 @@ function submitBooking(event) {
       document.getElementById('bookingModal').style.display = 'flex';
     })
     .catch((err) => {
-      console.error("Booking error:", err);
+      console.error("🔴 Booking error:", err);
       
       if (err === 'Time slot not available') {
         return; // Already showed alert
@@ -1232,6 +1313,8 @@ function submitBooking(event) {
       alert("Failed to complete booking. Please try again.");
     });
 }
+
+
 
 function closeBookingModal() {
   document.getElementById('bookingModal').style.display = 'none';
