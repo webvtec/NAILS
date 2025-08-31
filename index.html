@@ -985,10 +985,14 @@ function generateBookingNumber(name) {
 }
 
   (function() {
-    // 🔑 Your EmailJS Public Key
-    emailjs.init("L9_mhDlQunk76nnJA");  
-  })();
-
+  // Initialize EmailJS with better error handling
+  try {
+    emailjs.init("L9_mhDlQunk76nnJA");
+    console.log("✅ EmailJS initialized successfully");
+  } catch (error) {
+    console.error("❌ EmailJS initialization failed:", error);
+  }
+})();
 
 // Fixed email sending function
 function sendBookingEmails(bookingNumber, name, date, time, service) {
@@ -1032,18 +1036,25 @@ function sendConfirmationEmail(bookingNumber, name, date, time, service) {
   
   if (!user?.email) {
     console.warn("No authenticated user or email found");
-    return Promise.resolve(); // Don’t fail booking if no email
+    return Promise.resolve(); // Don't fail booking if no email
   }
 
-  const email = user.email; // ✅ FIX
-
-  return emailjs.send("service_n5j78b8", "template_r5qge2h", {
+  console.log("Sending email with data:", {
     bookingNumber,
     name,
-    email,   // ✅ Now defined
+    email: user.email,
     date,
     time,
     service
+  });
+
+  return emailjs.send("service_n5j78b8", "template_r5qge2h", {
+    to_email: user.email,  // Add this for the recipient
+    name: name,            // Template expects {{name}}
+    bookingNumber: bookingNumber,
+    date: date,
+    time: time,
+    service: service
   })
   .then((response) => {
     console.log("✅ Email sent successfully:", response.status, response.text);
@@ -1051,9 +1062,37 @@ function sendConfirmationEmail(bookingNumber, name, date, time, service) {
   })
   .catch((error) => {
     console.error("❌ Email sending failed:", error);
-    return null; // Let booking succeed anyway
+    console.error("Error details:", {
+      status: error.status,
+      text: error.text,
+      message: error.message
+    });
+    return null;
   });
 }
+
+
+// Add this function for testing emails independently
+function testEmail() {
+  const user = firebase.auth().currentUser;
+  if (!user) {
+    alert("Please log in first");
+    return;
+  }
+
+  console.log("Testing email to:", user.email);
+  
+  sendConfirmationEmail("TEST123", "Test User", "2025-09-01", "2:00 PM", "Test Service")
+    .then((result) => {
+      if (result) {
+        alert("✅ Test email sent successfully!");
+      } else {
+        alert("❌ Test email failed - check console for details");
+      }
+    });
+}
+
+// Call this function in browser console to test: testEmail()
 
 
 // Updated booking submission function
